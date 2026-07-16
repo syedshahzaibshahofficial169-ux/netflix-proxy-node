@@ -95,7 +95,7 @@ function getAmemberConfig() {
     enabled: amember.enabled !== false,
     url: url,
     api_key: amember.api_key || '',
-    session_timeout: amember.session_timeout != null ? amember.session_timeout : 5,
+    session_timeout: amember.session_timeout != null ? amember.session_timeout : 60,
     product_limits: amember.product_limits || {}
   };
 }
@@ -274,13 +274,21 @@ app.post('/site-login', (req, res) => {
 
 // User Login (aMember)
 app.get('/user-login', (req, res) => {
-  let errorMsg = req.query.error ? '<div style="color:#E50914;margin-bottom:15px;text-align:center;">Invalid Login Details or No Active Subscription Found</div>' : '';
+  let errorMsg = '';
+  if (req.query.expired === '1') {
+    errorMsg = '<div style="color:#ffc800;margin-bottom:15px;text-align:center;">Session expired. Please login again.</div>';
+  } else if (req.query.error === '1') {
+    errorMsg = '<div style="color:#E50914;margin-bottom:15px;text-align:center;">Invalid login or no active subscription found.</div>';
+  } else if (req.query.timeout === '1') {
+    errorMsg = '<div style="color:#E50914;margin-bottom:15px;text-align:center;">Login server timed out. Try again in a few seconds.</div>';
+  }
   res.send(`
     <!DOCTYPE html><html><head><title>Login to Proxy</title>
     <style>body{background:#111;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}
     .card{background:#222;padding:40px;border-radius:8px;max-width:400px;width:100%;box-shadow:0 4px 15px rgba(0,0,0,0.5);}
     input{width:100%;padding:12px;margin-bottom:15px;background:#000;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;}
     button{width:100%;padding:12px;background:#E50914;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;font-size:16px;}
+    button:disabled{opacity:0.6;cursor:wait;}
     button:hover{background:#f40612;}
     .instruction{color:#aaa;font-size:14px;text-align:center;margin-bottom:20px;line-height:1.5;}
     </style></head>
@@ -288,7 +296,11 @@ app.get('/user-login', (req, res) => {
     <h2 style="text-align:center;margin-top:0;">Access Netflix Proxy</h2>
     <div class="instruction">Please login with the EXACT same <b>Email</b> and <b>Password</b> that you used to purchase your subscription.</div>
     ${errorMsg}
-    <form method="POST"><input name="login" placeholder="Email Address" required><input type="password" name="pass" placeholder="Password" required><button>Login</button></form>
+    <form method="POST" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Logging in...';">
+      <input name="login" placeholder="Email Address" required>
+      <input type="password" name="pass" placeholder="Password" required>
+      <button type="submit">Login</button>
+    </form>
     </div></body></html>
   `);
 });
@@ -296,19 +308,20 @@ app.get('/user-login', (req, res) => {
 app.post('/user-login', async (req, res) => {
   const amember = getAmemberConfig();
   if (!amember.enabled) return res.redirect('/');
-  
+
   let bodyStr = req.rawBody ? req.rawBody.toString('utf8') : '';
   let params = new URLSearchParams(bodyStr);
   const login = params.get('login');
   const pass = params.get('pass');
 
   if (!login || !pass) return res.redirect('/user-login?error=1');
+  if (!amember.url || !amember.api_key || amember.api_key.startsWith('YOUR_')) {
+    return res.redirect('/user-login?error=1');
+  }
 
   try {
     const url = `${amember.url}/api/check-access/by-login-pass?_key=${amember.api_key}&login=${encodeURIComponent(login)}&pass=${encodeURIComponent(pass)}`;
-    console.log('--- aMember API Call ---');
-    console.log('URL:', url.replace(amember.api_key, '***KEY***'));
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const textData = await response.text();
     console.log('Response Status:', response.status);
     console.log('Response Text:', textData);
@@ -366,7 +379,10 @@ app.post('/user-login', async (req, res) => {
         res.redirect('/user-login?error=1');
     }
   } catch (e) {
-    console.error('aMember Auth Error:', e);
+    console.error('aMember Auth Error:', e.message || e);
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+      return res.redirect('/user-login?timeout=1');
+    }
     res.redirect('/user-login?error=1');
   }
 });
