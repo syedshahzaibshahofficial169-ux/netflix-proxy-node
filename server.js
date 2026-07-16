@@ -488,17 +488,28 @@ function getProxyHelperScript() {
   return cachedHelperJs;
 }
 
+function isValidProxyConfig(proxy) {
+  if (!proxy || !proxy.host || !proxy.port) return false;
+  if (!proxy.username || !proxy.password) return false;
+  if (proxy.username.startsWith('YOUR_') || proxy.password.startsWith('YOUR_')) return false;
+  return true;
+}
+
 function getProxyAgent(cred) {
   if (!cred.proxy_enabled) return null;
   const p = cred.proxy;
-  if (p && p.host && p.port) {
+  if (isValidProxyConfig(p)) {
     return new HttpsProxyAgent(`http://${p.username}:${p.password}@${p.host}:${p.port}`);
   }
   const b = cred.proxy_backup;
-  if (b && b.host && b.port) {
+  if (isValidProxyConfig(b)) {
     return new HttpsProxyAgent(`http://${b.username}:${b.password}@${b.host}:${b.port}`);
   }
   return null;
+}
+
+function sendSetupError(res, title, message) {
+  res.status(503).send(`<!DOCTYPE html><html><head><title>${title}</title><style>body{background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.card{background:#222;padding:32px;border-radius:10px;max-width:520px;text-align:center}h1{color:#E50914}p{color:#ccc;line-height:1.6}a{color:#fff}</style></head><body><div class="card"><h1>${title}</h1><p>${message}</p><p><a href="/admin">Open Admin Panel</a></p></div></body></html>`);
 }
 
 function stripSecurityHeaders(headers) {
@@ -525,6 +536,18 @@ app.get('/cookie-check', (req, res) => {
 // Main Proxy Route
 app.all('*', (req, res) => {
   const cred = loadCredentials();
+  const cookies = Array.isArray(cred.cookies) ? cred.cookies : [];
+  const hasNetflixCookies = cookies.some(c => c.name === 'NetflixId' || c.name === 'SecureNetflixId');
+  const isDocumentRequest = (req.headers.accept || '').includes('text/html') && req.method === 'GET';
+  const isMainNetflixRoute = !req.path.startsWith('/_g/') && isDocumentRequest;
+
+  if (isMainNetflixRoute && !hasNetflixCookies) {
+    return sendSetupError(res, 'Setup Required', 'Netflix cookies are missing. Open /admin, paste fresh Netflix cookies, save, then reload this page.');
+  }
+
+  if (isMainNetflixRoute && cred.proxy_enabled && !getProxyAgent(cred)) {
+    return sendSetupError(res, 'Proxy Not Configured', 'Residential proxy credentials are missing or invalid. Open /admin, set proxy host/user/password, save, then reload.');
+  }
 
   if (cred.blocked_paths) {
     const blocked = cred.blocked_paths.split(',').map(s => s.trim());
@@ -567,7 +590,13 @@ app.all('*', (req, res) => {
   }
 
   const proxyReq = https.request(targetUrl, options, (proxyRes) => {
+    if (proxyRes.statusCode === 407) {
+      return sendSetupError(res, 'Proxy Authentication Failed', 'Residential proxy rejected the credentials. Check username/password in /admin and try again.');
+    }
+
     let headers = stripSecurityHeaders({ ...proxyRes.headers });
+    delete headers['proxy-authenticate'];
+    delete headers['proxy-authorization'];
 
     if (headers['set-cookie']) {
       headers['set-cookie'] = headers['set-cookie'].map(c => {
@@ -618,7 +647,12 @@ app.all('*', (req, res) => {
     }
   });
 
-  proxyReq.on('error', (e) => res.status(502).end('Proxy Error'));
+  proxyReq.on('error', (e) => {
+    console.error('Proxy request error:', e.message);
+    if (!res.headersSent) {
+      sendSetupError(res, 'Proxy Connection Failed', `Could not reach Netflix through the configured proxy. Verify proxy settings in /admin. (${e.message})`);
+    }
+  });
 
   if (req.rawBody) proxyReq.write(req.rawBody);
   proxyReq.end();
