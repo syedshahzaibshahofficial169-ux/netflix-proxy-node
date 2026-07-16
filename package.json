@@ -1,0 +1,17 @@
+{
+  "name": "Netflix-node-proxy",
+  "version": "1.0.0",
+  "description": "Netflix Reverse Proxy with aMember",
+  "type": "module",
+  "main": "server.js",
+  "scripts": { "start": "node --max-http-header-size=81920 server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.0",
+    "https-proxy-agent": "^7.0.6",
+    "ws": "^8.18.0",
+    "cookie": "^0.7.2",
+    "cookie-parser": "^1.4.7",
+    "node-fetch": "^3.3.2"
+  }
+}

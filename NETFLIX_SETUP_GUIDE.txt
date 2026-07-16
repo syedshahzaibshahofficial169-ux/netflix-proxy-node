@@ -1,0 +1,52 @@
+=========================================================
+NETFLIX CLOUD PROXY - COMPLETE SETUP & DOCUMENTATION
+=========================================================
+
+1. PROJECT OVERVIEW
+This project is an advanced Node.js Reverse Proxy built specifically for Netflix. It allows users to securely access Netflix using pre-injected premium cookies while preventing them from modifying the account details. It also features a fully integrated Admin Panel and an aMember Authentication system.
+
+2. CORE FILES
+- server.js : The heart of the proxy. Handles all routing, proxying of requests, cookie injection, URL rewriting (turning external domains into /_g/domain), and the aMember REST API integration.
+- public/admin.html : The frontend for the Admin Panel. Allows configuration of general settings, proxies, aMember API keys, and allowed products.
+- public/proxy-helper.js : A background script injected into every Netflix page. It actively monitors the page and hides sensitive buttons (like "Sign Out", "Account", "Plans & Pricing") so users cannot click them.
+- credentials.json : The local database file. It safely stores the proxy configuration, admin password, Netflix cookies, and aMember settings.
+
+3. HOW THE LOGIN SYSTEM (AMEMBER) WORKS
+- When a user tries to access the proxy, they are redirected to /user-login.
+- They enter their Email and Password.
+- server.js takes this and makes a live REST API call to your aMember site using the provided URL and API Key (e.g., https://your-amember.com/api/check-access/by-login-pass).
+- If aMember verifies the login, it returns the user's active subscriptions.
+- The proxy checks if any of the user's Product IDs match the "Allowed Products" you configured in the Admin Panel.
+- If there is a match, the user is given access and securely redirected to Netflix.
+
+4. ADMIN PANEL INSTRUCTIONS (/admin)
+- Default Password: The password you set (originally Pak@2026).
+- General Settings: You paste your raw Netflix cookies (JSON array format) here. You can also configure blocked paths (paths that instantly redirect users to the homepage, like /account).
+- Proxy & aMember: Set up external proxy IPs to hide your server's IP from Netflix. Enter your aMember URL and API Key here.
+- Products Tab: Enter the specific Product IDs (and Names) from aMember that should be granted access to this Netflix proxy. (Note: Usage Limits were completely removed as requested).
+
+5. CRITICAL BUGS FIXED & HOW TO HANDLE THEM IN THE FUTURE
+
+A. "Page Disappears after 1 second" Bug:
+- Cause: The proxy-helper.js was originally hiding the entire #appMountPoint (the main Netflix container) if it found the words "Account" or "Sign Out" anywhere inside it.
+- Fix: We modified proxy-helper.js to only hide the specific buttons/links (leaf nodes) containing those words, rather than the entire page.
+
+B. "InternalServerError: stream is not readable" on Login:
+- Cause: The default Express body-parser was conflicting with the proxy middleware when handling POST requests (like logging in).
+- Fix: We implemented a custom "Raw Body Middleware" in server.js that manually reads the data streams before passing it to the proxy.
+
+C. "TypeError: Invalid URL" Crash:
+- Cause: If the aMember URL was entered in the admin panel without "https://", the native fetch() command would crash the server.
+- Fix: server.js now automatically detects and prepends "https://" to the URL if it is missing.
+
+D. Blank Screen / Corrupted Site (Service Worker Issue):
+- Cause: Netflix uses background "Service Workers" that cache site data locally on the user's browser. If a proxy error occurs once, the browser caches the broken page forever.
+- Fix: We injected code into server.js to completely disable Service Workers (navigator.serviceWorker = null). If users ever see a blank page, tell them to "Clear Site Data" or "Hard Refresh" in their browser.
+
+6. COMMANDS
+- To start the server: npm start
+- To run in background permanently (Production): Use PM2 (e.g., pm2 start server.js --name "netflix-proxy")
+
+=========================================================
+END OF DOCUMENTATION
+=========================================================

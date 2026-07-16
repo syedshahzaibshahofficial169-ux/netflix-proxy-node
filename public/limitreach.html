@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Netflix Cloud - Limit Reached</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { background-color: #111; color: #eee; font-family: 'Inter', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .card { background: #222; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    h2 { color: #E50914; margin-top: 0; }
+    p { color: #aaa; line-height: 1.5; }
+    .stats { background: #333; padding: 15px; border-radius: 8px; margin: 20px 0; font-size: 1.1em; }
+    .btn { display: inline-block; background: #E50914; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; transition: background 0.3s; }
+    .btn:hover { background: #f40612; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 id="limitTitle">Limit Reached</h2>
+    <p id="limitMessage">You have exhausted your usage credits for this period.</p>
+    <div class="stats">
+      Used: <strong id="usedCount">0</strong> / Limit: <strong id="limitCount">0</strong>
+    </div>
+    <a href="/dashboard" class="btn">Go to Dashboard</a>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get('reason');
+    const used = params.get('used') || 0;
+    const limit = params.get('limit') || 0;
+    
+    document.getElementById('usedCount').innerText = used;
+    document.getElementById('limitCount').innerText = limit;
+    
+    if (reason === 'daily') {
+      document.getElementById('limitTitle').innerText = 'Daily Limit Reached';
+      document.getElementById('limitMessage').innerText = 'You have reached your daily usage limit. Please try again tomorrow.';
+    } else if (reason === 'monthly') {
+      document.getElementById('limitTitle').innerText = 'Monthly Limit Reached';
+      document.getElementById('limitMessage').innerText = 'You have reached your monthly usage limit. Please upgrade your plan or wait until next month.';
+    }
+  </script>
+</body>
+</html>
