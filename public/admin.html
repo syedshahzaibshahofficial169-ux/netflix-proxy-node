@@ -104,7 +104,7 @@
         </div>
         <div class="form-group">
           <label>Primary Proxy (host:port:user:pass)</label>
-          <input type="text" id="primaryProxy">
+          <input type="text" id="primaryProxy" placeholder="user:pass@host:port">
         </div>
         <div class="form-group">
           <label>Backup Proxy (host:port:user:pass)</label>
@@ -183,8 +183,8 @@
 
       // Proxy & aMember
       document.getElementById('proxyEnabled').checked = data.proxy_enabled;
-      document.getElementById('primaryProxy').value = `${data.proxy?.host||''}:${data.proxy?.port||''}@${data.proxy?.username||''}:${data.proxy?.password||''}`;
-      document.getElementById('backupProxy').value = `${data.proxy_backup?.host||''}:${data.proxy_backup?.port||''}@${data.proxy_backup?.username||''}:${data.proxy_backup?.password||''}`;
+      document.getElementById('primaryProxy').value = formatProxyString(data.proxy);
+      document.getElementById('backupProxy').value = formatProxyString(data.proxy_backup);
       
       if(data.amember) {
         document.getElementById('amemberEnabled').checked = data.amember.enabled;
@@ -283,16 +283,35 @@
     }
     
     function parseProxyString(str) {
-      if(!str) return { host:'', port:0, username:'', password:'' };
-      const parts = str.split('@');
-      const creds = parts.length > 1 ? parts[1].split(':') : [];
-      const hostPort = parts[0].split(':');
+      if (!str) return { host: '', port: 0, username: '', password: '' };
+      const parts = str.trim().split('@');
+      if (parts.length < 2) return { host: '', port: 0, username: '', password: '' };
+
+      const left = parts[0].split(':');
+      const right = parts[1].split(':');
+      const leftIsHost = parts[0].includes('.');
+      const rightIsHost = parts[1].includes('.');
+
+      if (rightIsHost && !leftIsHost) {
+        return {
+          username: left[0] || '',
+          password: left.slice(1).join(':') || '',
+          host: right[0] || '',
+          port: parseInt(right[1] || 0, 10)
+        };
+      }
+
       return {
-        host: hostPort[0] || '',
-        port: parseInt(hostPort[1] || 0),
-        username: creds[0] || '',
-        password: creds[1] || ''
+        host: left[0] || '',
+        port: parseInt(left[1] || 0, 10),
+        username: right[0] || '',
+        password: right.slice(1).join(':') || ''
       };
+    }
+
+    function formatProxyString(proxy) {
+      if (!proxy || !proxy.host) return '';
+      return `${proxy.username || ''}:${proxy.password || ''}@${proxy.host}:${proxy.port || ''}`;
     }
 
     function saveProxy() {
